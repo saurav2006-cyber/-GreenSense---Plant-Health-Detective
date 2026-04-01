@@ -1,0 +1,104 @@
+"""
+GreenSense - Main Application Entry Point
+"""
+
+import sys
+import argparse
+from pathlib import Path
+
+# Try to import GUI modules, fallback to CLI if tkinter not available
+try:
+    import tkinter as tk
+    from gui import GreenSenseGUI
+    GUI_AVAILABLE = True
+except ImportError:
+    GUI_AVAILABLE = False
+    print("Note: tkinter not available, running in CLI mode")
+
+from plant_detector import PlantHealthDetector
+
+def run_cli():
+    """Run command-line interface version"""
+    parser = argparse.ArgumentParser(description="GreenSense - Plant Health Detective")
+    parser.add_argument("image_path", help="Path to plant image")
+    parser.add_argument("--plant", "-p", help="Plant name (optional)")
+    parser.add_argument("--visualize", "-v", action="store_true", help="Show visualization")
+    
+    args = parser.parse_args()
+    
+    # Check if image exists
+    if not Path(args.image_path).exists():
+        print(f"Error: Image not found at {args.image_path}")
+        return
+    
+    # Create detector and analyze
+    detector = PlantHealthDetector()
+    print("Analyzing plant health...")
+    
+    try:
+        report = detector.analyze_plant(args.image_path, args.plant)
+        
+        # Print results
+        print("\n" + "="*50)
+        print("🌿 PLANT HEALTH REPORT")
+        print("="*50)
+        print(f"Image: {args.image_path}")
+        print(f"Plant: {args.plant or 'Unknown'}")
+        print(f"\nDiagnosis: {report['diagnosis']['condition'].replace('_', ' ').upper()}")
+        print(f"Severity: {report['diagnosis']['severity'].upper()}")
+        print(f"Confidence: {report['diagnosis']['confidence']:.1%}")
+        print(f"\nUrgent: {'YES' if report['urgent'] else 'NO'}")
+        
+        print("\n📊 Key Indicators:")
+        print(f"  Yellowing Area: {report['features']['yellowing_area']:.1f}%")
+        print(f"  Brown Area: {report['features']['brown_area']:.1f}%")
+        print(f"  Spots Detected: {report['features']['num_spots']}")
+        
+        print("\n💡 Recommendations:")
+        for i, rec in enumerate(report['recommendations'], 1):
+            print(f"  {i}. {rec}")
+        
+        print(f"\n⏰ Analysis completed at: {report['timestamp']}")
+        print("="*50)
+        
+        # Show visualization if requested
+        if args.visualize:
+            detector.visualize_report(report)
+            
+    except Exception as e:
+        print(f"Error during analysis: {e}")
+
+def run_gui():
+    """Run graphical interface version"""
+    if not GUI_AVAILABLE:
+        print("Error: GUI mode requires tkinter")
+        print("Install tkinter or run in CLI mode")
+        return
+    
+    root = tk.Tk()
+    app = GreenSenseGUI(root)
+    root.mainloop()
+
+def main():
+    """Main entry point"""
+    print("🌱 GreenSense - Plant Health Detective")
+    print("="*50)
+    
+    # Check command line arguments
+    if len(sys.argv) > 1:
+        run_cli()
+    else:
+        # No arguments, try to run GUI
+        if GUI_AVAILABLE:
+            print("Starting GUI mode...")
+            run_gui()
+        else:
+            print("No arguments provided and GUI not available")
+            print("Usage:")
+            print("  GUI mode: python main.py")
+            print("  CLI mode: python main.py <image_path> [--plant NAME] [--visualize]")
+            print("\nExample:")
+            print("  python main.py sample_leaf.jpg --plant tomato --visualize")
+
+if __name__ == "__main__":
+    main()
