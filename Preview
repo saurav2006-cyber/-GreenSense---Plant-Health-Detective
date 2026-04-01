@@ -1,0 +1,28 @@
+GreenSense/
+├── README.md
+├── requirements.txt
+├── setup.py
+├── main.py
+├── gui.py
+├── plant_detector.py
+├── disease_classifier.py
+├── plant_database.py
+├── image_processor.py
+├── utils.py
+├── config.py
+├── data/
+│   ├── plant_dataset/      # Training images
+│   │   ├── healthy/
+│   │   ├── diseased/
+│   │   └── deficient/
+│   ├── plant_info.json     # Plant knowledge base
+│   └── models/             # Saved ML models
+├── tests/
+│   ├── test_detector.py
+│   └── test_classifier.py
+├── examples/
+│   └── sample_images/
+├── docs/
+│   ├── installation.md
+│   └── user_guide.md
+└── .gitignore
