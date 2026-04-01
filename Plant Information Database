@@ -1,0 +1,109 @@
+"""
+Plant information and care tips database
+"""
+
+import json
+from pathlib import Path
+from typing import Dict, List
+
+class PlantDatabase:
+    def __init__(self):
+        self.data_dir = Path(__file__).parent / "data"
+        self.db_file = self.data_dir / "plant_info.json"
+        self.plant_info = self.load_database()
+        
+    def load_database(self) -> Dict:
+        """Load plant information database"""
+        if self.db_file.exists():
+            with open(self.db_file, 'r') as f:
+                return json.load(f)
+        return self.get_default_database()
+    
+    def get_default_database(self) -> Dict:
+        """Create default plant database with common issues"""
+        return {
+            "tomato": {
+                "symptoms": {
+                    "yellow_leaves": {
+                        "cause": "Nitrogen deficiency or overwatering",
+                        "solution": "Apply nitrogen-rich fertilizer and reduce watering frequency",
+                        "urgency": "medium"
+                    },
+                    "brown_spots": {
+                        "cause": "Early blight or fungal infection",
+                        "solution": "Remove affected leaves, apply copper fungicide",
+                        "urgency": "high"
+                    },
+                    "curled_leaves": {
+                        "cause": "Aphids or viral infection",
+                        "solution": "Check for pests, apply neem oil",
+                        "urgency": "high"
+                    },
+                    "wilting": {
+                        "cause": "Underwatering or root rot",
+                        "solution": "Check soil moisture, adjust watering schedule",
+                        "urgency": "high"
+                    }
+                },
+                "care_tips": [
+                    "Water deeply once a week",
+                    "Provide 6-8 hours of sunlight",
+                    "Use well-draining soil",
+                    "Fertilize every 2 weeks during growing season"
+                ]
+            },
+            "potato": {
+                "symptoms": {
+                    "yellow_leaves": {
+                        "cause": "Nutrient deficiency or blight",
+                        "solution": "Fertilize with balanced NPK, check for blight signs",
+                        "urgency": "medium"
+                    },
+                    "black_spots": {
+                        "cause": "Late blight infection",
+                        "solution": "Remove infected plants immediately, use fungicide",
+                        "urgency": "critical"
+                    }
+                },
+                "care_tips": [
+                    "Plant in well-drained soil",
+                    "Hill soil around plants as they grow",
+                    "Water consistently, especially during tuber formation"
+                ]
+            }
+        }
+    
+    def get_plant_info(self, plant_name: str) -> Dict:
+        """Get information about specific plant"""
+        return self.plant_info.get(plant_name.lower(), None)
+    
+    def diagnose_symptoms(self, plant_name: str, symptoms: List[str]) -> Dict:
+        """Diagnose plant based on symptoms"""
+        plant = self.get_plant_info(plant_name)
+        if not plant:
+            return {"error": "Plant not found in database"}
+        
+        diagnosis = []
+        for symptom in symptoms:
+            if symptom in plant.get("symptoms", {}):
+                diagnosis.append({
+                    "symptom": symptom,
+                    "info": plant["symptoms"][symptom]
+                })
+        
+        return {
+            "plant": plant_name,
+            "diagnosis": diagnosis,
+            "care_tips": plant.get("care_tips", []),
+            "urgent_actions": [d for d in diagnosis if d["info"]["urgency"] == "critical"]
+        }
+    
+    def add_plant(self, plant_name: str, info: Dict):
+        """Add new plant to database"""
+        self.plant_info[plant_name.lower()] = info
+        self.save_database()
+    
+    def save_database(self):
+        """Save database to file"""
+        with open(self.db_file, 'w') as f:
+            json.dump(self.plant_info, f, indent=2)
