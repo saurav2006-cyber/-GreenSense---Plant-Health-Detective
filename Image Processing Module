@@ -1,0 +1,150 @@
+"""
+Image processing utilities for plant disease detection
+"""
+
+import cv2
+import numpy as np
+from PIL import Image
+import matplotlib.pyplot as plt
+from typing import Tuple, List, Optional
+
+class ImageProcessor:
+    def __init__(self):
+        self.target_size = (224, 224)  # Standard size for ML models
+        
+    def load_image(self, image_path: str) -> np.ndarray:
+        """Load image from path"""
+        image = cv2.imread(image_path)
+        if image is None:
+            raise ValueError(f"Could not load image from {image_path}")
+        return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    
+    def preprocess(self, image: np.ndarray) -> np.ndarray:
+        """Preprocess image for analysis"""
+        # Resize
+        resized = cv2.resize(image, self.target_size)
+        
+        # Normalize
+        normalized = resized / 255.0
+        
+        # Convert to float32
+        return normalized.astype(np.float32)
+    
+    def extract_leaf_features(self, image: np.ndarray) -> dict:
+        """Extract features from leaf image for disease detection"""
+        # Convert to HSV color space
+        hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+        
+        # Split channels
+        h, s, v = cv2.split(hsv)
+        
+        # Calculate statistics
+        features = {
+            "mean_hue": np.mean(h),
+            "std_hue": np.std(h),
+            "mean_saturation": np.mean(s),
+            "std_saturation": np.std(s),
+            "mean_value": np.mean(v),
+            "std_value": np.std(v),
+            "num_spots": self.detect_spots(image),
+            "yellowing_area": self.calculate_yellowing_area(image),
+            "brown_area": self.calculate_brown_area(image)
+        }
+        
+        return features
+    
+    def detect_spots(self, image: np.ndarray, threshold: int = 50) -> int:
+        """Detect number of spots on leaf"""
+        # Convert to grayscale
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        
+        # Apply Gaussian blur
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        
+        # Apply adaptive threshold
+        _, thresh = cv2.threshold(blurred, threshold, 255, cv2.THRESH_BINARY_INV)
+        
+        # Find contours
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # Filter small spots
+        spots = [c for c in contours if cv2.contourArea(c) > 10]
+        
+        return len(spots)
+    
+    def calculate_yellowing_area(self, image: np.ndarray) -> float:
+        """Calculate percentage of yellow area in leaf"""
+        # Convert to HSV
+        hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+        
+        # Define yellow range
+        lower_yellow = np.array([20, 100, 100])
+        upper_yellow = np.array([30, 255, 255])
+        
+        # Create mask
+        mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
+        
+        # Calculate percentage
+        yellow_pixels = np.sum(mask > 0)
+        total_pixels = mask.size
+        
+        return (yellow_pixels / total_pixels) * 100
+    
+    def calculate_brown_area(self, image: np.ndarray) -> float:
+        """Calculate percentage of brown area in leaf"""
+        # Convert to HSV
+        hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+        
+        # Define brown range
+        lower_brown = np.array([10, 50, 50])
+        upper_brown = np.array([20, 150, 150])
+        
+        # Create mask
+        mask = cv2.inRange(hsv, lower_brown, upper_brown)
+        
+        # Calculate percentage
+        brown_pixels = np.sum(mask > 0)
+        total_pixels = mask.size
+        
+        return (brown_pixels / total_pixels) * 100
+    
+    def visualize_analysis(self, image: np.ndarray, features: dict):
+        """Visualize image analysis results"""
+        fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+        
+        # Original image
+        axes[0, 0].imshow(image)
+        axes[0, 0].set_title("Original Image")
+        axes[0, 0].axis('off')
+        
+        # HSV channels
+        hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+        h, s, v = cv2.split(hsv)
+        
+        axes[0, 1].imshow(h, cmap='hsv')
+        axes[0, 1].set_title("Hue Channel")
+        axes[0, 1].axis('off')
+        
+        axes[0, 2].imshow(s, cmap='gray')
+        axes[0, 2].set_title("Saturation Channel")
+        axes[0, 2].axis('off')
+        
+        # Spot detection
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        _, thresh = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY_INV)
+        axes[1, 0].imshow(thresh, cmap='gray')
+        axes[1, 0].set_title(f"Spot Detection (Found: {features['num_spots']} spots)")
+        axes[1, 0].axis('off')
+        
+        # Yellow area
+        axes[1, 1].imshow(image)
+        axes[1, 1].set_title(f"Yellow Area: {features['yellowing_area']:.1f}%")
+        axes[1, 1].axis('off')
+        
+        # Brown area
+        axes[1, 2].imshow(image)
+        axes[1, 2].set_title(f"Brown Area: {features['brown_area']:.1f}%")
+        axes[1, 2].axis('off')
+        
+        plt.tight_layout()
+        plt.show()
