@@ -1,0 +1,198 @@
+"""
+Main Plant Health Detection System
+"""
+
+import cv2
+import numpy as np
+from pathlib import Path
+import matplotlib.pyplot as plt
+from datetime import datetime
+import json
+
+from image_processor import ImageProcessor
+from disease_classifier import DiseaseClassifier
+from plant_database import PlantDatabase
+
+class PlantHealthDetector:
+    def __init__(self):
+        self.image_processor = ImageProcessor()
+        self.classifier = DiseaseClassifier()
+        self.database = PlantDatabase()
+        self.history_file = Path(__file__).parent / "data" / "detection_history.json"
+        self.load_history()
+    
+    def load_history(self):
+        """Load detection history"""
+        if self.history_file.exists():
+            with open(self.history_file, 'r') as f:
+                self.history = json.load(f)
+        else:
+            self.history = []
+    
+    def save_history(self):
+        """Save detection history"""
+        with open(self.history_file, 'w') as f:
+            json.dump(self.history, f, indent=2)
+    
+    def analyze_plant(self, image_path: str, plant_name: str = None) -> dict:
+        """Analyze plant health from image"""
+        # Load and process image
+        image = self.image_processor.load_image(image_path)
+        
+        # Extract features
+        features = self.image_processor.extract_leaf_features(image)
+        
+        # Get disease prediction
+        if self.classifier.model:
+            disease, confidence = self.classifier.predict(features)
+        else:
+            # Rule-based diagnosis if no trained model
+            disease, confidence = self.rule_based_diagnosis(features)
+        
+        # Get plant care information
+        plant_info = None
+        if plant_name:
+            plant_info = self.database.get_plant_info(plant_name)
+        
+        # Prepare diagnosis report
+        report = {
+            "timestamp": datetime.now().isoformat(),
+            "image_path": image_path,
+            "plant_name": plant_name,
+            "features": features,
+            "diagnosis": {
+                "condition": disease,
+                "confidence": confidence.get(disease, 0) if confidence else 0,
+                "severity": self.calculate_severity(features)
+            },
+            "recommendations": self.generate_recommendations(disease, features, plant_info),
+            "urgent": self.is_urgent(disease, features)
+        }
+        
+        # Save to history
+        self.history.append(report)
+        self.save_history()
+        
+        return report
+    
+    def rule_based_diagnosis(self, features: dict) -> tuple:
+        """Rule-based diagnosis when ML model is not available"""
+        # Simple rules based on features
+        yellow_area = features.get('yellowing_area', 0)
+        brown_area = features.get('brown_area', 0)
+        num_spots = features.get('num_spots', 0)
+        
+        if yellow_area > 30:
+            disease = "nutrient_deficiency"
+            confidence = {"nutrient_deficiency": 0.8}
+        elif brown_area > 20:
+            disease = "late_blight"
+            confidence = {"late_blight": 0.7}
+        elif num_spots > 10:
+            disease = "early_blight"
+            confidence = {"early_blight": 0.6}
+        elif yellow_area < 10 and brown_area < 5 and num_spots < 5:
+            disease = "healthy"
+            confidence = {"healthy": 0.9}
+        else:
+            disease = "unknown"
+            confidence = {"unknown": 0.5}
+        
+        return disease, confidence
+    
+    def calculate_severity(self, features: dict) -> str:
+        """Calculate severity of disease"""
+        yellow_area = features.get('yellowing_area', 0)
+        brown_area = features.get('brown_area', 0)
+        num_spots = features.get('num_spots', 0)
+        
+        severity_score = (yellow_area + brown_area * 1.5 + num_spots * 0.5) / 100
+        
+        if severity_score < 0.2:
+            return "mild"
+        elif severity_score < 0.5:
+            return "moderate"
+        else:
+            return "severe"
+    
+    def generate_recommendations(self, disease: str, features: dict, plant_info: dict) -> list:
+        """Generate care recommendations based on diagnosis"""
+        recommendations = []
+        
+        # General recommendations
+        if disease == "healthy":
+            recommendations.append("✓ Plant appears healthy! Continue current care routine.")
+            recommendations.append("💧 Maintain consistent watering schedule")
+            recommendations.append("🌞 Ensure adequate sunlight exposure")
+        elif disease == "early_blight":
+            recommendations.append("⚠️ Remove affected leaves immediately")
+            recommendations.append("🍄 Apply copper-based fungicide")
+            recommendations.append("💧 Water at base of plant to avoid wetting leaves")
+            recommendations.append("🌱 Improve air circulation around plant")
+        elif disease == "late_blight":
+            recommendations.append("🚨 URGENT: Isolate infected plant")
+            recommendations.append("🍄 Apply fungicide containing chlorothalonil")
+            recommendations.append("🌿 Remove and destroy infected parts")
+            recommendations.append("📝 Monitor daily for spread")
+        elif disease == "nutrient_deficiency":
+            recommendations.append("🌱 Apply balanced NPK fertilizer (10-10-10)")
+            recommendations.append("💚 Add compost or organic matter to soil")
+            recommendations.append("💧 Ensure proper watering for nutrient absorption")
+        elif disease == "yellow_leaf_curl":
+            recommendations.append("🦟 Control whitefly population")
+            recommendations.append("🚫 Remove infected plants to prevent spread")
+            recommendations.append("🌱 Plant resistant varieties next season")
+        
+        # Add plant-specific tips if available
+        if plant_info and "care_tips" in plant_info:
+            recommendations.extend(plant_info["care_tips"][:2])
+        
+        return recommendations
+    
+    def is_urgent(self, disease: str, features: dict) -> bool:
+        """Check if immediate action is needed"""
+        urgent_diseases = ["late_blight", "yellow_leaf_curl"]
+        severe_conditions = features.get('brown_area', 0) > 30 or features.get('num_spots', 0) > 20
+        
+        return disease in urgent_diseases or severe_conditions
+    
+    def visualize_report(self, report: dict):
+        """Generate visual report of plant health analysis"""
+        image = cv2.cvtColor(
+            self.image_processor.load_image(report["image_path"]),
+            cv2.COLOR_BGR2RGB
+        )
+        
+        fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+        
+        # Original image
+        axes[0, 0].imshow(image)
+        axes[0, 0].set_title("Plant Image")
+        axes[0, 0].axis('off')
+        
+        # Health status
+        axes[0, 1].axis('off')
+        status_text = f"""HEALTH REPORT
+        Condition: {report['diagnosis']['condition'].replace('_', ' ').title()}
+        Severity: {report['diagnosis']['severity'].upper()}
+        Confidence: {report['diagnosis']['confidence']:.1%}
+        """
+        axes[0, 1].text(0.1, 0.5, status_text, fontsize=12, verticalalignment='center')
+        
+        # Features plot
+        features = report['features']
+        feature_names = ['Yellow %', 'Brown %', 'Spots']
+        feature_values = [features['yellowing_area'], features['brown_area'], features['num_spots']]
+        
+        axes[1, 0].bar(feature_names, feature_values, color=['yellow', 'brown', 'red'])
+        axes[1, 0].set_title("Key Indicators")
+        axes[1, 0].set_ylabel("Percentage / Count")
+        
+        # Recommendations
+        axes[1, 1].axis('off')
+        recommendations = "\n".join(report['recommendations'][:5])
+        axes[1, 1].text(0.1, 0.5, f"RECOMMENDATIONS:\n{recommendations}", 
+                        fontsize=10, verticalalignment='center')
+        
+        plt.tight_layout()
+        plt.show()
